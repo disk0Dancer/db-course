@@ -26,6 +26,6 @@ public class PhysicalProject extends Project implements PhysicalRel {
 
     @Override
     public Project copy(RelTraitSet traitSet, RelNode input, List<RexNode> projects, RelDataType rowType) {
-        throw new RuntimeException("Should have been already implemented in Task 5");
+        return new PhysicalProject(getCluster(), traitSet, hints, input, projects, rowType, getVariablesSet());
     }
 }
