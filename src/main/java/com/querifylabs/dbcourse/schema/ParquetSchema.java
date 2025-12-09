@@ -8,7 +8,6 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
-// TODO Task 1: Implement reading parquet schema from a folder.
 public class ParquetSchema extends AbstractSchema {
     private final Map<String, Schema> subSchemaMap;
 

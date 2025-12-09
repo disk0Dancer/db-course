@@ -74,7 +74,9 @@ public class CourseOptimizer {
     public RelRoot convert(String sql) {
         var parsed = parseSql(sql);
         var validated = validator.validate(parsed);
-        return sqlToRelConverter.convertQuery(validated, false, true);
+        var relRoot = sqlToRelConverter.convertQuery(validated, false, true);
+        var trimmedRel = sqlToRelConverter.trimUnusedFields(true, relRoot.rel);
+        return relRoot.withRel(trimmedRel);
     }
 
     public RelRoot optimize(RelRoot unoptimized) {
