@@ -1,7 +1,9 @@
 package com.querifylabs.dbcourse;
 
 import com.querifylabs.dbcourse.rel.FoldTreeRelVisitor;
+import com.querifylabs.dbcourse.rel.phy.FilterIntoTableScanRule;
 import com.querifylabs.dbcourse.rel.phy.PhysicalConvention;
+import com.querifylabs.dbcourse.rel.phy.ProjectIntoTableScanRule;
 import com.querifylabs.dbcourse.rel.phy.ToPhysicalRules;
 import com.querifylabs.dbcourse.schema.ParquetSchema;
 import com.querifylabs.dbcourse.sql.ExtendedSqlOperatorTable;
@@ -61,7 +63,8 @@ public class CourseOptimizer {
         }
 
         if (enableScanPushdown) {
-            // TODO Task 6: Add project and filter into scan rules.
+            volcanoPlanner.addRule(ProjectIntoTableScanRule.INSTANCE);
+            volcanoPlanner.addRule(FilterIntoTableScanRule.INSTANCE);
         }
 
         relOptCluster = RelOptCluster.create(volcanoPlanner, new RexBuilder(dataTypeFactory));
@@ -93,12 +96,12 @@ public class CourseOptimizer {
 
     public RelRoot optimizePhysical(RelRoot logical) {
         return logical.withRel(
-            getPhysicalProgram().run(
-                volcanoPlanner,
-                logical.rel,
-                logical.rel.getTraitSet().replace(PhysicalConvention.INSTANCE),
-                List.of(),
-                List.of())
+                getPhysicalProgram().run(
+                        volcanoPlanner,
+                        logical.rel,
+                        logical.rel.getTraitSet().replace(PhysicalConvention.INSTANCE),
+                        List.of(),
+                        List.of())
         );
     }
 
@@ -118,7 +121,7 @@ public class CourseOptimizer {
 
     protected Program getLogicalProgram() {
         return Programs.sequence(
-            foldConstantsProgram()
+                foldConstantsProgram()
         );
     }
 
@@ -126,9 +129,9 @@ public class CourseOptimizer {
         return (planner, rel, requiredOutputTraits, materializations, lattices) -> {
             planner.setRoot(rel);
             final RelNode rootRel =
-                rel.getTraitSet().equals(requiredOutputTraits)
-                    ? rel
-                    : planner.changeTraits(rel, requiredOutputTraits);
+                    rel.getTraitSet().equals(requiredOutputTraits)
+                            ? rel
+                            : planner.changeTraits(rel, requiredOutputTraits);
 
             planner.setRoot(rootRel);
             return planner.findBestExp();
