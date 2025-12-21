@@ -133,5 +133,13 @@ public class ParquetTable extends AbstractTable implements TranslatableTable {
         return typeFactory.createTypeWithNullability(
                 typeFactory.createSqlType(SqlTypeName.VARCHAR), true);
     }
-}
 
+    public List<File> getFiles() {
+        File tableDir = new File(tablePath);
+        File[] parquetFiles = tableDir.listFiles((dir, name) -> name.endsWith(".parquet"));
+        if (parquetFiles == null) {
+            return List.of();
+        }
+        return List.of(parquetFiles);
+    }
+}
