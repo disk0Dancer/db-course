@@ -10,9 +10,8 @@ public class ExtendedSqlOperatorTable extends ReflectiveSqlOperatorTable {
             instance = new ExtendedSqlOperatorTable();
             instance.init();
         }
-
         return instance;
     }
 
-    // TODO: Task 2 add lower() and upper() functions.
+    public static final SqlBase64DecodeFunction BASE64DECODE = new SqlBase64DecodeFunction();
 }
