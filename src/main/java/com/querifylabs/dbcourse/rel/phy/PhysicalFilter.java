@@ -16,7 +16,6 @@ public class PhysicalFilter extends Filter implements PhysicalRel {
 
     @Override
     public Filter copy(RelTraitSet traitSet, RelNode input, RexNode condition) {
-        // TODO Task 5: Return a copy of physical filter, but replace fields with the arguments.
-        throw new RuntimeException("TODO Task5: Implement");
+        return new PhysicalFilter(getCluster(), traitSet, hints, input, condition);
     }
 }
