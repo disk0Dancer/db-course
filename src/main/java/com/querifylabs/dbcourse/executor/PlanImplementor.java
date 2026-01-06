@@ -1,17 +1,22 @@
 package com.querifylabs.dbcourse.executor;
 
+import com.querifylabs.dbcourse.executor.expression.ExpressionCompiler;
+import com.querifylabs.dbcourse.executor.expression.ExpressionNode;
+import com.querifylabs.dbcourse.rel.phy.PhysicalFilter;
 import com.querifylabs.dbcourse.rel.phy.PhysicalTableScan;
 import com.querifylabs.dbcourse.schema.ParquetTable;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelShuttleImpl;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexUtil;
 
 /**
  * Converter that translates optimized node to an executable tree.
  */
 public class PlanImplementor {
     public ExecutionNode implementPlan(ExecutionContext ctx, RelNode root) {
-        if (root instanceof PhysicalTableScan) {
-            PhysicalTableScan scan = (PhysicalTableScan) root;
+        if (root instanceof PhysicalTableScan scan) {
+            assert scan.getTable() != null;
             ParquetTable table = scan.getTable().unwrap(ParquetTable.class);
             return new ParquetScanNode(ctx, table, scan.getProjectedColumns());
         }
@@ -41,13 +46,27 @@ public class PlanImplementor {
             if (other instanceof PhysicalTableScan) {
                 return visitPhysicalScan((PhysicalTableScan) other);
             }
+            if (other instanceof PhysicalFilter) {
+                return visitPhysicalFilter((PhysicalFilter) other);
+            }
             return super.visit(other);
         }
 
         private RelNode visitPhysicalScan(PhysicalTableScan scan) {
+            assert scan.getTable() != null;
             ParquetTable table = scan.getTable().unwrap(ParquetTable.class);
             result = new ParquetScanNode(ctx, table, scan.getProjectedColumns());
             return scan;
+        }
+
+        private RelNode visitPhysicalFilter(PhysicalFilter filter) {
+            super.visit(filter);
+            ExecutionNode input = result;
+            RexNode condition = filter.getCondition();
+            RexNode expanded = RexUtil.expandSearch(filter.getCluster().getRexBuilder(), null, condition);
+            ExpressionNode expr = expanded.accept(new ExpressionCompiler());
+            result = new FilterNode(ctx, input, expr);
+            return filter;
         }
     }
 }
