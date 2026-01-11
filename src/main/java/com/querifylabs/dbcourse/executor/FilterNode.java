@@ -48,5 +48,8 @@ public class FilterNode extends BaseExecutionNode {
     public void close() throws Exception {
         input.close();
     }
-}
 
+    public ExecutionNode getInput() {
+        return input;
+    }
+}
