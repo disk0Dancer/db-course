@@ -28,20 +28,21 @@ public class ComparisonExpression implements ExpressionNode {
             BitVector result = new BitVector("cmp", ctx.getAllocator());
             result.allocateNew(rowCount);
 
-            TimeStampMicroVector l = (TimeStampMicroVector) leftVec;
-            TimeStampMicroVector r = (TimeStampMicroVector) rightVec;
-
             for (int i = 0; i < rowCount; i++) {
-                if (l.isNull(i) || r.isNull(i)) {
+                if (leftVec.isNull(i) || rightVec.isNull(i)) {
                     result.setNull(i);
                 } else {
-                    long lVal = l.get(i);
-                    long rVal = r.get(i);
+                    long lVal = getLong(leftVec, i);
+                    long rVal = getLong(rightVec, i);
                     boolean match = false;
-                    if (op == SqlKind.GREATER_THAN_OR_EQUAL) {
-                        match = lVal >= rVal;
-                    } else if (op == SqlKind.LESS_THAN_OR_EQUAL) {
-                        match = lVal <= rVal;
+                    switch (op) {
+                        case GREATER_THAN_OR_EQUAL: match = lVal >= rVal; break;
+                        case LESS_THAN_OR_EQUAL: match = lVal <= rVal; break;
+                        case GREATER_THAN: match = lVal > rVal; break;
+                        case LESS_THAN: match = lVal < rVal; break;
+                        case EQUALS: match = lVal == rVal; break;
+                        case NOT_EQUALS: match = lVal != rVal; break;
+                        default: throw new UnsupportedOperationException("Unknown op: " + op);
                     }
                     result.set(i, match ? 1 : 0);
                 }
@@ -49,13 +50,17 @@ public class ComparisonExpression implements ExpressionNode {
             result.setValueCount(rowCount);
             return result;
         } finally {
-            if (left.producesNewVector()) {
-                leftVec.close();
-            }
-            if (right.producesNewVector()) {
-                rightVec.close();
-            }
+            if (left.producesNewVector()) leftVec.close();
+            if (right.producesNewVector()) rightVec.close();
         }
+    }
+
+    private long getLong(ValueVector v, int index) {
+        if (v instanceof TimeStampMicroVector) return ((TimeStampMicroVector) v).get(index);
+        if (v instanceof org.apache.arrow.vector.TimeStampMilliVector) return ((org.apache.arrow.vector.TimeStampMilliVector) v).get(index);
+        if (v instanceof org.apache.arrow.vector.BigIntVector) return ((org.apache.arrow.vector.BigIntVector) v).get(index);
+        if (v instanceof org.apache.arrow.vector.IntVector) return ((org.apache.arrow.vector.IntVector) v).get(index);
+        throw new UnsupportedOperationException("Vector type not supported in cmp: " + v.getClass().getName());
     }
 
     @Override
@@ -63,4 +68,3 @@ public class ComparisonExpression implements ExpressionNode {
         return true;
     }
 }
-

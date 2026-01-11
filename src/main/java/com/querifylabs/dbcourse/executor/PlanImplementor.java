@@ -10,6 +10,8 @@ import org.apache.calcite.rel.RelShuttleImpl;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexUtil;
 
+import java.util.List;
+
 /**
  * Converter that translates optimized node to an executable tree.
  */
@@ -18,7 +20,7 @@ public class PlanImplementor {
         if (root instanceof PhysicalTableScan scan) {
             assert scan.getTable() != null;
             ParquetTable table = scan.getTable().unwrap(ParquetTable.class);
-            return new ParquetScanNode(ctx, table, scan.getProjectedColumns());
+            return new ParquetScanNode(ctx, table, scan.getProjectedColumns(), scan.getFilter());
         }
         ImplementationVisitor visitor = new ImplementationVisitor(ctx);
         root.accept(visitor);
@@ -55,7 +57,8 @@ public class PlanImplementor {
         private RelNode visitPhysicalScan(PhysicalTableScan scan) {
             assert scan.getTable() != null;
             ParquetTable table = scan.getTable().unwrap(ParquetTable.class);
-            result = new ParquetScanNode(ctx, table, scan.getProjectedColumns());
+            List<RexNode> filters = scan.getFilter();
+            result = new ParquetScanNode(ctx, table, scan.getProjectedColumns(), filters);
             return scan;
         }
 
