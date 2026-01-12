@@ -93,7 +93,6 @@ public class ParquetScanNode extends BaseExecutionNode {
             return;
         }
 
-        
         Schema s;
         try (DatasetFactory dsFactory = new FileSystemDatasetFactory(
             executionContext.getAllocator(), NativeMemoryPool.getDefault(),
@@ -104,7 +103,6 @@ public class ParquetScanNode extends BaseExecutionNode {
         }
 
         List<File> filesToScan = new ArrayList<>();
-        
         List<String> fieldNames = s.getFields().stream().map(org.apache.arrow.vector.types.pojo.Field::getName).collect(Collectors.toList());
 
         for (File f : allFiles) {
@@ -155,7 +153,6 @@ public class ParquetScanNode extends BaseExecutionNode {
         try (ParquetFileReader reader = ParquetFileReader.open(new Configuration(), new Path(f.getAbsolutePath()))) {
             ParquetMetadata footer = reader.getFooter();
             for (BlockMetaData block : footer.getBlocks()) {
-                boolean blockSatisfies = true;
                 if (checkBlock(block, conditions, fieldNames)) {
                      return false; 
                 }
@@ -205,22 +202,16 @@ public class ParquetScanNode extends BaseExecutionNode {
                 if (refIndex >= 0 && refIndex < fieldNames.size()) {
                     String colName = fieldNames.get(refIndex);
                     if (!colName.contains("datetime")) return true;
-    private boolean checkCondition(BlockMetaData block, RexNode cond, List<String> fieldNames) {
-        
-        if (cond instanceof RexCall call) {
-            if (call.getKind() == SqlKind.AND) {
-                
-            }
+
+                    ColumnChunkMetaData chunk = getColumnChunk(block, colName);
+                    if (chunk == null) return true;
 
                     Statistics stats = chunk.getStatistics();
                     if (stats == null || stats.isEmpty()) {
-                        System.err.println("Stats missing for " + colName);
                         return true;
                     }
 
                     return checkStats(stats, kind, literalVal);
-                } else {
-                    
                 }
             }
         }
@@ -257,52 +248,29 @@ public class ParquetScanNode extends BaseExecutionNode {
         Long mn = convertToLong((Comparable) min);
         Long mx = convertToLong((Comparable) max);
 
-        
-        
-        
-        
-
         if (v == null || mn == null || mx == null) {
-            
             return true;
         }
 
-        
         if (mn > 1000000000000000L && v < 10000000000000L) {
              v *= 1000;
-             
         }
 
-             if (kind == SqlKind.LESS_THAN) {
-                 if (mn >= v) {
-                     
-                     return false;
-                 }
-             }
-             if (kind == SqlKind.LESS_THAN_OR_EQUAL) {
-                 if (mn > v) {
-                     
-                     return false;
-                 }
-             }
-             if (kind == SqlKind.GREATER_THAN) {
-                 if (mx <= v) {
-                     
-                     return false;
-                 }
-             }
-             if (kind == SqlKind.GREATER_THAN_OR_EQUAL) {
-                 if (mx < v) {
-                     
-                     return false;
-                 }
-             }
-             if (kind == SqlKind.EQUALS) {
-                 if (mx < v || mn > v) {
-                     
-                     return false;
-                 }
-             }
+        if (kind == SqlKind.LESS_THAN) {
+            if (mn >= v) return false;
+        }
+        if (kind == SqlKind.LESS_THAN_OR_EQUAL) {
+            if (mn > v) return false;
+        }
+        if (kind == SqlKind.GREATER_THAN) {
+            if (mx <= v) return false;
+        }
+        if (kind == SqlKind.GREATER_THAN_OR_EQUAL) {
+            if (mx < v) return false;
+        }
+        if (kind == SqlKind.EQUALS) {
+            if (mx < v || mn > v) return false;
+        }
 
         return true;
     }
