@@ -33,7 +33,9 @@ public class ExpressionCompiler extends RexVisitorImpl<ExpressionNode> {
                 operands.add(operand.accept(this));
             }
             return new AndExpression(operands);
-        } else if (call.getKind() == SqlKind.LESS_THAN_OR_EQUAL || call.getKind() == SqlKind.GREATER_THAN_OR_EQUAL) {
+        } else if (call.getKind() == SqlKind.LESS_THAN_OR_EQUAL || call.getKind() == SqlKind.GREATER_THAN_OR_EQUAL
+                || call.getKind() == SqlKind.LESS_THAN || call.getKind() == SqlKind.GREATER_THAN
+                || call.getKind() == SqlKind.EQUALS || call.getKind() == SqlKind.NOT_EQUALS) {
             return new ComparisonExpression(
                 call.getKind(),
                 call.getOperands().get(0).accept(this),

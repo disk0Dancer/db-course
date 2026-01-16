@@ -23,31 +23,76 @@ public class ProjectIntoTableScanRule extends RelOptRule {
         var project = (PhysicalProject) call.rel(0);
         var scan = (PhysicalTableScan) call.rel(1);
 
-        Set<Integer> usedColumns = new LinkedHashSet<>();
-        for (RexNode expr : project.getProjects()) {
-            collectInputRefs(expr, usedColumns);
+        java.util.Map<Integer, Integer> scanOutputToBase = new java.util.HashMap<>();
+        List<Integer> currentProjection = scan.getProjectedColumns();
+
+        int scanFieldCount = scan.getRowType().getFieldCount();
+        for (int i = 0; i < scanFieldCount; i++) {
+            if (currentProjection == null) {
+                scanOutputToBase.put(i, i);
+            } else {
+                scanOutputToBase.put(i, currentProjection.get(i));
+            }
         }
 
-        if (usedColumns.isEmpty() || usedColumns.size() == scan.getTable().getRowType().getFieldCount()) return;
-        if (scan.getProjectedColumns() != null) return;
+        
+        Set<Integer> neededBaseCols = new java.util.TreeSet<>();
 
-        List<Integer> projectedColumns = new ArrayList<>(usedColumns);
+        for (RexNode expr : project.getProjects()) {
+            collectInputRefs(expr, neededBaseCols, scanOutputToBase);
+        }
+
+        
+        boolean changed = false;
+        List<Integer> newProjectedColumns = new ArrayList<>(neededBaseCols);
+
+        if (currentProjection == null) {
+            if (newProjectedColumns.size() < scan.getTable().getRowType().getFieldCount()) {
+                changed = true;
+            }
+        } else {
+            if (!newProjectedColumns.equals(currentProjection)) {
+                changed = true;
+            }
+        }
+
+        if (!changed) {
+            
+            
+            return;
+        }
 
         PhysicalTableScan newScan = new PhysicalTableScan(
             scan.getCluster(), scan.getTraitSet(), scan.getHints(),
-            scan.getTable(), projectedColumns, scan.getFilter()
+            scan.getTable(), newProjectedColumns, scan.getFilter()
         );
 
-        Mappings.TargetMapping mapping = Mappings.target(projectedColumns, scan.getTable().getRowType().getFieldCount());
-
-        List<RexNode> newProjects = new ArrayList<>();
-        for (RexNode expr : project.getProjects()) {
-            newProjects.add(expr.accept(new org.apache.calcite.rex.RexPermuteInputsShuttle(mapping)));
+        
+        java.util.Map<Integer, Integer> baseToNewScan = new java.util.HashMap<>();
+        for (int i = 0; i < newProjectedColumns.size(); i++) {
+            baseToNewScan.put(newProjectedColumns.get(i), i);
         }
 
-        // check if all projects are just identity column refs
+        
+        List<RexNode> newProjects = new ArrayList<>();
+        org.apache.calcite.rex.RexShuttle shuttle = new org.apache.calcite.rex.RexShuttle() {
+            @Override
+            public RexNode visitInputRef(RexInputRef inputRef) {
+                
+                Integer baseIdx = scanOutputToBase.get(inputRef.getIndex());
+                
+                Integer newScanIdx = baseToNewScan.get(baseIdx);
+                return new RexInputRef(newScanIdx, inputRef.getType());
+            }
+        };
+
+        for (RexNode expr : project.getProjects()) {
+            newProjects.add(expr.accept(shuttle));
+        }
+
+        
         boolean allIdentity = true;
-        if (newProjects.size() == projectedColumns.size()) {
+        if (newProjects.size() == newProjectedColumns.size()) {
             for (int i = 0; i < newProjects.size(); i++) {
                 RexNode p = newProjects.get(i);
                 if (!(p instanceof RexInputRef) || ((RexInputRef) p).getIndex() != i) {
@@ -70,14 +115,14 @@ public class ProjectIntoTableScanRule extends RelOptRule {
         }
     }
 
-    private void collectInputRefs(RexNode node, Set<Integer> columns) {
+    private void collectInputRefs(RexNode node, Set<Integer> columns, java.util.Map<Integer, Integer> mapping) {
         if (node instanceof RexInputRef) {
-            columns.add(((RexInputRef) node).getIndex());
+            columns.add(mapping.get(((RexInputRef) node).getIndex()));
         } else {
             node.accept(new org.apache.calcite.rex.RexVisitorImpl<Void>(true) {
                 @Override
                 public Void visitInputRef(RexInputRef inputRef) {
-                    columns.add(inputRef.getIndex());
+                    columns.add(mapping.get(inputRef.getIndex()));
                     return null;
                 }
             });

@@ -25,17 +25,35 @@ public class FilterIntoTableScanRule extends RelOptRule {
         var filter = (PhysicalFilter) call.rel(0);
         var scan = (PhysicalTableScan) call.rel(1);
 
-        if (scan.getFilter() != null) return;
-
         List<RexNode> conjunctions = RelOptUtil.conjunctions(filter.getCondition());
         List<RexNode> pushableFilters = new ArrayList<>();
 
         for (RexNode conj : conjunctions) {
             RexNode expanded = RexUtil.expandSearch(filter.getCluster().getRexBuilder(), null, conj);
-            if (isSimpleComparison(expanded)) pushableFilters.add(expanded);
+            if (isSimpleComparison(expanded)) {
+                pushableFilters.add(expanded);
+            }
         }
 
         if (pushableFilters.isEmpty()) return;
+
+        if (scan.getFilter() != null) {
+            boolean allPresent = true;
+            for (RexNode pf : pushableFilters) {
+                boolean found = false;
+                for (RexNode sf : scan.getFilter()) {
+                    if (sf.toString().equals(pf.toString())) { 
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    allPresent = false;
+                    break;
+                }
+            }
+            if (allPresent) return;
+        }
 
         RexNode filterToPush = RexUtil.composeConjunction(filter.getCluster().getRexBuilder(), pushableFilters);
 
@@ -47,13 +65,40 @@ public class FilterIntoTableScanRule extends RelOptRule {
             remappedFilter = filterToPush.accept(new org.apache.calcite.rex.RexPermuteInputsShuttle(inverseMapping));
         }
 
+        List<RexNode> newFilters = new ArrayList<>();
+        if (scan.getFilter() != null) {
+            newFilters.addAll(scan.getFilter());
+        }
+
+        List<RexNode> remappedConjunctions = RelOptUtil.conjunctions(remappedFilter);
+        for (RexNode rc : remappedConjunctions) {
+             boolean found = false;
+             if (scan.getFilter() != null) {
+                 for (RexNode sf : scan.getFilter()) {
+                     if (sf.toString().equals(rc.toString())) {
+                         found = true;
+                         break;
+                     }
+                 }
+             }
+             if (!found) {
+                 newFilters.add(rc);
+             }
+        }
+
+        if (newFilters.size() == (scan.getFilter() == null ? 0 : scan.getFilter().size())) {
+            
+            return;
+        }
+
         PhysicalTableScan newScan = new PhysicalTableScan(
             scan.getCluster(), scan.getTraitSet(), scan.getHints(),
-            scan.getTable(), scan.getProjectedColumns(), List.of(remappedFilter)
+            scan.getTable(), scan.getProjectedColumns(), newFilters
         );
 
-        PhysicalFilter newFilter = (PhysicalFilter) filter.copy(filter.getTraitSet(), newScan, filter.getCondition());
-        call.transformTo(newFilter);
+        
+        PhysicalFilter newFilterRel = (PhysicalFilter) filter.copy(filter.getTraitSet(), newScan, filter.getCondition());
+        call.transformTo(newFilterRel);
     }
 
     private boolean isSimpleComparison(RexNode node) {
@@ -65,9 +110,17 @@ public class FilterIntoTableScanRule extends RelOptRule {
             kind == SqlKind.GREATER_THAN_OR_EQUAL || kind == SqlKind.NOT_EQUALS) {
             if (c.getOperands().size() == 2) {
                 for (RexNode op : c.getOperands()) {
-                    if (op instanceof RexInputRef) return true;
+                    if (isInputRefOrCast(op)) return true;
                 }
             }
+        }
+        return false;
+    }
+
+    private boolean isInputRefOrCast(RexNode op) {
+        if (op instanceof RexInputRef) return true;
+        if (op instanceof RexCall && op.getKind() == SqlKind.CAST) {
+            return ((RexCall) op).getOperands().get(0) instanceof RexInputRef;
         }
         return false;
     }
